@@ -106,13 +106,11 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // PUBLIC_INTERFACE
+  /// Mock login submit handler (placeholder for real validation/auth).
+  ///
+  /// This function performs simple, local validation and sets UI state.
+  /// No real authentication is performed.
   void handleSubmit() {
-    """Mock login submit handler (placeholder for real validation/auth).
-
-    This function performs simple, local validation and sets UI state.
-    No real authentication is performed.
-    """;
-
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 

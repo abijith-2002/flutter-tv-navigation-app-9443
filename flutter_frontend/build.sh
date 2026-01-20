@@ -1,1 +1,1 @@
-flutter build apk --debug
+/opt/flutter/bin/flutter build apk --debug

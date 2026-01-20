@@ -3,16 +3,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_frontend/main.dart';
 
 void main() {
-  testWidgets('App generation message displayed', (WidgetTester tester) async {
+  testWidgets('Login screen renders', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('flutter_frontend App is being generated...'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Login'), findsOneWidget);
   });
 
-  testWidgets('App bar has correct title', (WidgetTester tester) async {
+  testWidgets('Mock validation shows error when fields empty',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('flutter_frontend'), findsOneWidget);
+    // Press login with empty fields.
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Login'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Please enter a username and password.'), findsOneWidget);
   });
 }

@@ -125,10 +125,10 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
-  KeyEventResult _onKey(FocusNode node, RawKeyEvent event) {
-    // Provide an explicit fallback for hardware keys; Shortcuts/Actions
-    // should handle it too, but some TV devices can be inconsistent.
-    if (event is RawKeyDownEvent) {
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    // Provide an explicit fallback for hardware keys; Shortcuts/Actions should
+    // handle it too, but some TV devices can be inconsistent.
+    if (event is KeyDownEvent) {
       final key = event.logicalKey;
       if (key == LogicalKeyboardKey.enter ||
           key == LogicalKeyboardKey.select ||
@@ -168,11 +168,11 @@ class _LoginScreenState extends State<LoginScreen> {
             },
           ),
         },
-        child: RawKeyboardListener(
-          focusNode: FocusNode(debugLabel: 'loginRawKeyboardListener'),
-          onKey: (event) {
-            // Let the focused widget handle it first via Actions/Shortcuts,
-            // but keep a safety net for devices.
+        child: KeyboardListener(
+          focusNode: FocusNode(debugLabel: 'loginKeyboardListener'),
+          onKeyEvent: (event) {
+            // Safety net: handle submit keys even if focus/shortcuts are flaky.
+            _onKeyEvent(FocusNode(), event);
           },
           autofocus: true,
           child: Scaffold(
@@ -259,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               focusNode: _loginButtonFocusNode,
                               label: 'Login',
                               onPressed: handleSubmit,
-                              onKey: _onKey,
+                              onKeyEvent: _onKeyEvent,
                             ),
 
                             const SizedBox(height: 16),
@@ -293,8 +293,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     )
                                   : (_didSubmit
                                       ? Container(
-                                          key:
-                                              const ValueKey('successPlaceholder'),
+                                          key: const ValueKey(
+                                              'successPlaceholder'),
                                           width: double.infinity,
                                           padding: const EdgeInsets.all(14),
                                           decoration: BoxDecoration(
@@ -302,8 +302,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                             borderRadius:
                                                 BorderRadius.circular(12),
                                             border: Border.all(
-                                              color:
-                                                  cs.primary.withAlpha(140),
+                                              color: cs.primary.withAlpha(140),
                                               width: 1.2,
                                             ),
                                           ),
@@ -314,8 +313,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                                 .textTheme
                                                 .bodyLarge
                                                 ?.copyWith(
-                                                  color:
-                                                      cs.onPrimaryContainer,
+                                                  color: cs.onPrimaryContainer,
                                                   fontWeight: FontWeight.w600,
                                                 ),
                                           ),
@@ -423,13 +421,13 @@ class _FocusableButton extends StatelessWidget {
     required this.focusNode,
     required this.label,
     required this.onPressed,
-    required this.onKey,
+    required this.onKeyEvent,
   });
 
   final FocusNode focusNode;
   final String label;
   final VoidCallback onPressed;
-  final KeyEventResult Function(FocusNode, RawKeyEvent) onKey;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
 
   @override
   Widget build(BuildContext context) {
@@ -437,7 +435,7 @@ class _FocusableButton extends StatelessWidget {
 
     return Focus(
       focusNode: focusNode,
-      onKey: onKey,
+      onKeyEvent: onKeyEvent,
       child: Builder(
         builder: (context) {
           final hasFocus = Focus.of(context).hasFocus;

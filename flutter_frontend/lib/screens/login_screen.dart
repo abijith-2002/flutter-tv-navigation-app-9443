@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_frontend/widgets/on_screen_keyboard.dart';
 
 /// A login screen optimized for Android TV DPAD navigation.
 ///
 /// Refactor notes:
 /// - Username and Password are presented as focusable ListTile rows (TV-friendly).
 /// - DPAD Up/Down moves focus between Username → Password → Login.
-/// - DPAD Center/Enter selects a tile to edit via a simple dialog editor, or
+/// - DPAD Center/Enter selects a tile to edit via an on-screen keyboard overlay, or
 ///   activates the Login button.
 /// - Pressing Login navigates to `/home` (no auth in this sample).
 class LoginScreen extends StatefulWidget {
@@ -92,68 +93,40 @@ class _LoginScreenState extends State<LoginScreen> {
       return KeyEventResult.handled;
     }
 
-    // We handle "Select" for tiles via ListTile.onTap, not here.
+    // "Select" for tiles is handled by ListTile.onTap, not here.
     return KeyEventResult.ignored;
   }
 
   // PUBLIC_INTERFACE
-  Future<void> _editValue({
+  Future<void> _editValueWithKeyboard({
     required String title,
     required String initialValue,
-    required bool obscure,
+    required bool obscurePreview,
     required ValueChanged<String> onSaved,
+    required FocusNode returnFocusTo,
   }) async {
-    /// Opens a TV-friendly dialog editor for a single string value.
+    /// Opens a TV-friendly on-screen keyboard overlay and returns the typed value.
     ///
-    /// Uses a TextField inside a dialog to allow hardware keyboard/remote input.
-    /// Returns via `onSaved` if user confirms.
-    final TextEditingController controller =
-        TextEditingController(text: initialValue);
+    /// While the keyboard is open, a temporary buffer is used. On Done, the buffer
+    /// is returned and applied via `onSaved`. On Cancel/Back, returns null and does
+    /// not modify the field.
+    ///
+    /// After the overlay closes, focus is restored to `returnFocusTo`.
+    final String? result = await OnScreenKeyboard.show(
+      context,
+      title: title,
+      initialValue: initialValue,
+      obscurePreview: obscurePreview,
+    );
 
-    try {
-      final String? result = await showDialog<String>(
-        context: context,
-        barrierDismissible: true,
-        builder: (dialogContext) {
-          return AlertDialog(
-            title: Text(title),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              obscureText: obscure,
-              enableSuggestions: !obscure,
-              autocorrect: !obscure,
-              style: const TextStyle(fontSize: 20),
-              decoration: InputDecoration(
-                hintText: obscure ? 'Enter password' : 'Enter username',
-                border: const OutlineInputBorder(),
-              ),
-              onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(null),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.of(dialogContext).pop(
-                  controller.text,
-                ),
-                child: const Text('OK'),
-              ),
-            ],
-          );
-        },
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      if (result != null) {
-        onSaved(result);
-      }
-    } finally {
-      controller.dispose();
+    if (result != null) {
+      setState(() => onSaved(result));
     }
+
+    // Ensure focus is restored cleanly to the triggering tile.
+    returnFocusTo.requestFocus();
   }
 
   String _passwordPreview(String value) {
@@ -256,17 +229,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     title: 'Username',
                     valuePreview: _username.isEmpty ? 'Select to enter' : _username,
                     onActivate: () async {
-                      await _editValue(
+                      await _editValueWithKeyboard(
                         title: 'Username',
                         initialValue: _username,
-                        obscure: false,
+                        obscurePreview: false,
+                        returnFocusTo: _usernameTileFocusNode,
                         onSaved: (value) {
-                          setState(() => _username = value);
+                          _username = value;
                         },
                       );
-
-                      if (!mounted) return;
-                      _usernameTileFocusNode.requestFocus();
                     },
                   ),
 
@@ -279,17 +250,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? 'Select to enter'
                         : _passwordPreview(_password),
                     onActivate: () async {
-                      await _editValue(
+                      await _editValueWithKeyboard(
                         title: 'Password',
                         initialValue: _password,
-                        obscure: true,
+                        obscurePreview: true,
+                        returnFocusTo: _passwordTileFocusNode,
                         onSaved: (value) {
-                          setState(() => _password = value);
+                          _password = value;
                         },
                       );
-
-                      if (!mounted) return;
-                      _passwordTileFocusNode.requestFocus();
                     },
                   ),
 

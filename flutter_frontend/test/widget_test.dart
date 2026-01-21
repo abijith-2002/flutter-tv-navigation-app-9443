@@ -24,22 +24,33 @@ void main() {
   });
 
   testWidgets(
-    'Opening and closing the username editor dialog does not throw (focus tree regression)',
+    'Username tile opens on-screen keyboard and applies submitted value',
     (WidgetTester tester) async {
       await tester.pumpWidget(const MyApp());
       await tester.pumpAndSettle();
 
-      // Tap Username tile to open the dialog.
+      // Open keyboard by tapping the Username tile.
       await tester.tap(find.widgetWithText(ListTile, 'Username'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(AlertDialog), findsOneWidget);
+      // Fullscreen dialog content should be present.
+      expect(find.text('Username'), findsWidgets);
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
 
-      // Close dialog via Cancel.
-      await tester.tap(find.text('Cancel'));
+      // Tap a couple of keys then Done.
+      await tester.tap(find.text('A'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('B'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(AlertDialog), findsNothing);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      // Username value should now show in the ListTile trailing text.
+      expect(find.text('AB'), findsOneWidget);
+
+      // No exceptions (e.g., focus attachment issues).
       expect(tester.takeException(), isNull);
     },
   );

@@ -146,4 +146,49 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'OSK: DPAD traversal keeps a non-null primary focus and UP from first row exits back to input tile',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+      await tester.pumpAndSettle();
+
+      // Open OSK by activating Username tile.
+      await tester.tap(find.widgetWithText(ListTile, 'Username'));
+      await tester.pumpAndSettle();
+
+      // Ensure keyboard is visible.
+      expect(find.text('Done'), findsOneWidget);
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+
+      // Move around with DPAD and ensure focus never becomes null.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+      await tester.pump();
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+
+      // Go back to top row (two ups) then one more up should exit (cancel dialog),
+      // letting the login screen restore focus to Username tile.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.pumpAndSettle();
+
+      // Keyboard should be closed now.
+      expect(find.text('Done'), findsNothing);
+
+      // Focus should still exist (restored to login tile by caller).
+      expect(FocusManager.instance.primaryFocus, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

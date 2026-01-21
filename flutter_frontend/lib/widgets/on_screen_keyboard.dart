@@ -73,6 +73,9 @@ class OnScreenKeyboard extends StatefulWidget {
 class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
   late String _buffer;
 
+  // Keep a stable focus scope so focus doesn't get lost during rebuilds.
+  late final FocusScopeNode _keyboardScopeNode;
+
   // We keep individual key focus nodes so DPAD traversal is predictable and does
   // not rely on implicit focus order.
   late final List<FocusNode> _keyFocusNodes;
@@ -80,9 +83,17 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
   /// Flattened key model used by the GridView.
   late final List<_KeySpec> _keys;
 
+  // Track last-focused key index so we can restore focus after rebuilds.
+  int _lastFocusedKeyIndex = 0;
+
+  // Grid configuration (character rows are 10 columns; actions are appended).
+  static const int _columns = 10;
+  static const int _characterRows = 4;
+
   @override
   void initState() {
     super.initState();
+    _keyboardScopeNode = FocusScopeNode(debugLabel: 'osk_scope');
     _buffer = widget.initialValue;
     _keys = _buildKeys();
     _keyFocusNodes = List<FocusNode>.generate(
@@ -90,12 +101,37 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
       (i) => FocusNode(debugLabel: 'kb_key_${i}_${_keys[i].label}'),
     );
 
+    for (int i = 0; i < _keyFocusNodes.length; i++) {
+      _keyFocusNodes[i].addListener(() {
+        if (_keyFocusNodes[i].hasFocus) {
+          _lastFocusedKeyIndex = i;
+        }
+      });
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       // Start focus on first character key (top-left).
       if (_keyFocusNodes.isNotEmpty) {
-        _keyFocusNodes.first.requestFocus();
+        _keyboardScopeNode.requestFocus(_keyFocusNodes.first);
       }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant OnScreenKeyboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If focus was lost during a rebuild (can happen on some Android TV devices),
+    // restore it to the last-focused key.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final bool scopeHasFocus = _keyboardScopeNode.hasFocus;
+      if (scopeHasFocus) return;
+
+      if (_keyFocusNodes.isEmpty) return;
+      final int index = _lastFocusedKeyIndex.clamp(0, _keyFocusNodes.length - 1);
+      _keyboardScopeNode.requestFocus(_keyFocusNodes[index]);
     });
   }
 
@@ -108,6 +144,7 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
     for (final node in _keyFocusNodes) {
       node.dispose();
     }
+    _keyboardScopeNode.dispose();
     super.dispose();
   }
 
@@ -202,7 +239,16 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
     return '••••';
   }
 
-  KeyEventResult _handleKeyActivate(_KeySpec spec, KeyEvent event) {
+  int _rowForIndex(int index) => index ~/ _columns;
+  int _colForIndex(int index) => index % _columns;
+
+  bool _isCharacterKeyIndex(int index) => index < _columns * _characterRows;
+
+  KeyEventResult _handleKeyEvent({
+    required int index,
+    required _KeySpec spec,
+    required KeyEvent event,
+  }) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final LogicalKeyboardKey key = event.logicalKey;
@@ -222,6 +268,72 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
       return KeyEventResult.handled;
     }
 
+    // Explicit DPAD navigation: avoid platform-dependent implicit traversal.
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      final int target = (index - 1).clamp(0, _keyFocusNodes.length - 1);
+      _keyboardScopeNode.requestFocus(_keyFocusNodes[target]);
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowRight) {
+      final int target = (index + 1).clamp(0, _keyFocusNodes.length - 1);
+      _keyboardScopeNode.requestFocus(_keyFocusNodes[target]);
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowUp) {
+      if (_isCharacterKeyIndex(index)) {
+        final int row = _rowForIndex(index);
+        final int col = _colForIndex(index);
+
+        // Requirement: allow exiting back to the input fields when pressing UP
+        // from the first keyboard row. We do that by cancelling the dialog,
+        // letting the caller restore focus to the input tile.
+        if (row == 0) {
+          _cancel();
+          return KeyEventResult.handled;
+        }
+
+        final int target = ((row - 1) * _columns + col)
+            .clamp(0, _keyFocusNodes.length - 1);
+        _keyboardScopeNode.requestFocus(_keyFocusNodes[target]);
+        return KeyEventResult.handled;
+      }
+
+      // From action strip, move to the nearest character key in the last row.
+      final int actionStripStart = _columns * _characterRows;
+      final int actionIndex = index - actionStripStart;
+      final int col = actionIndex.clamp(0, _columns - 1);
+      final int target = ((_characterRows - 1) * _columns + col)
+          .clamp(0, _keyFocusNodes.length - 1);
+      _keyboardScopeNode.requestFocus(_keyFocusNodes[target]);
+      return KeyEventResult.handled;
+    }
+
+    if (key == LogicalKeyboardKey.arrowDown) {
+      if (_isCharacterKeyIndex(index)) {
+        final int row = _rowForIndex(index);
+        final int col = _colForIndex(index);
+
+        // From last character row, go to action strip.
+        if (row == _characterRows - 1) {
+          final int actionStripStart = _columns * _characterRows;
+          final int target =
+              (actionStripStart + col).clamp(0, _keyFocusNodes.length - 1);
+          _keyboardScopeNode.requestFocus(_keyFocusNodes[target]);
+          return KeyEventResult.handled;
+        }
+
+        final int target = ((row + 1) * _columns + col)
+            .clamp(0, _keyFocusNodes.length - 1);
+        _keyboardScopeNode.requestFocus(_keyFocusNodes[target]);
+        return KeyEventResult.handled;
+      }
+
+      // In action strip: do nothing (stay in row).
+      return KeyEventResult.handled;
+    }
+
     return KeyEventResult.ignored;
   }
 
@@ -236,11 +348,14 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
       vertical: (size.height * 0.06).clamp(24.0, 72.0),
     );
 
-    // We use a Focus widget at the root to intercept DPAD_BACK/Escape.
+    // We use a Focus widget at the root to intercept DPAD_BACK/Escape, and a
+    // stable FocusScope for the keyboard keys.
     return Focus(
       autofocus: true,
       onKeyEvent: (_, event) => _handleBack(event),
-      child: Scaffold(
+      child: FocusScope(
+        node: _keyboardScopeNode,
+        child: Scaffold(
         backgroundColor: scheme.surface,
         body: SafeArea(
           child: Padding(
@@ -277,22 +392,19 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
                 const SizedBox(height: 18),
                 Expanded(
                   child: FocusTraversalGroup(
-                    // Grid-like traversal should be stable/predictable.
+                    // Keep for tab traversal / accessibility, but DPAD is handled
+                    // explicitly per-key for Android TV stability.
                     policy: ReadingOrderTraversalPolicy(),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        // 10 columns for character grid; action row is appended.
-                        // We keep each key large enough for TV.
-                        const int columns = 10;
-
                         final double spacing = 12;
                         final double tileWidth =
-                            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+                            (constraints.maxWidth - spacing * (_columns - 1)) / _columns;
                         final double tileHeight = (tileWidth * 0.75).clamp(56.0, 92.0);
 
                         return GridView.builder(
                           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: columns,
+                            crossAxisCount: _columns,
                             crossAxisSpacing: spacing,
                             mainAxisSpacing: spacing,
                             childAspectRatio: tileWidth / tileHeight,
@@ -309,9 +421,14 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
                                 ? const EdgeInsets.symmetric(horizontal: 10, vertical: 10)
                                 : const EdgeInsets.symmetric(horizontal: 6, vertical: 8);
 
-                            return Focus(
+                            return FocusableActionDetector(
                               focusNode: node,
-                              onKeyEvent: (_, event) => _handleKeyActivate(spec, event),
+                              autofocus: false,
+                              onKeyEvent: (node, event) => _handleKeyEvent(
+                                index: index,
+                                spec: spec,
+                                event: event,
+                              ),
                               child: Builder(
                                 builder: (context) {
                                   final bool hasFocus = Focus.of(context).hasFocus;
@@ -345,6 +462,7 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
                                           : const <BoxShadow>[],
                                     ),
                                     child: InkWell(
+                                      canRequestFocus: true,
                                       onTap: () => _activateKey(spec),
                                       child: Center(
                                         child: Padding(
@@ -385,6 +503,7 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

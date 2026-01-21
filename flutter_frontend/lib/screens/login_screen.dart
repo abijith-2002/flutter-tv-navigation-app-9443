@@ -3,10 +3,12 @@ import 'package:flutter/services.dart';
 
 /// A login screen optimized for Android TV DPAD navigation.
 ///
-/// - Up/Down moves focus between username, password, and login button.
-/// - Enter/Select on the Login button triggers login.
-/// - Enter/Done on password triggers login.
-/// - On "login" navigates to `/home` (no auth in this sample).
+/// Refactor notes:
+/// - Username and Password are presented as focusable ListTile rows (TV-friendly).
+/// - DPAD Up/Down moves focus between Username → Password → Login.
+/// - DPAD Center/Enter selects a tile to edit via a simple dialog editor, or
+///   activates the Login button.
+/// - Pressing Login navigates to `/home` (no auth in this sample).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -15,34 +17,32 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  String _username = '';
+  String _password = '';
 
-  late final FocusNode _usernameFocusNode;
-  late final FocusNode _passwordFocusNode;
+  late final FocusNode _usernameTileFocusNode;
+  late final FocusNode _passwordTileFocusNode;
   late final FocusNode _loginButtonFocusNode;
 
   @override
   void initState() {
     super.initState();
-    _usernameFocusNode = FocusNode(debugLabel: 'username');
-    _passwordFocusNode = FocusNode(debugLabel: 'password');
+    _usernameTileFocusNode = FocusNode(debugLabel: 'username_tile');
+    _passwordTileFocusNode = FocusNode(debugLabel: 'password_tile');
     _loginButtonFocusNode = FocusNode(debugLabel: 'login_button');
 
-    // On TV, it's often desirable to have initial focus land on the first field.
+    // On TV, it's often desirable to have initial focus land on the first row.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        _usernameFocusNode.requestFocus();
+        _usernameTileFocusNode.requestFocus();
       }
     });
   }
 
   @override
   void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _usernameFocusNode.dispose();
-    _passwordFocusNode.dispose();
+    _usernameTileFocusNode.dispose();
+    _passwordTileFocusNode.dispose();
     _loginButtonFocusNode.dispose();
     super.dispose();
   }
@@ -61,11 +61,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final LogicalKeyboardKey key = event.logicalKey;
 
     if (key == LogicalKeyboardKey.arrowDown) {
-      if (currentNode == _usernameFocusNode) {
-        _requestNext(_passwordFocusNode);
+      if (currentNode == _usernameTileFocusNode) {
+        _requestNext(_passwordTileFocusNode);
         return KeyEventResult.handled;
       }
-      if (currentNode == _passwordFocusNode) {
+      if (currentNode == _passwordTileFocusNode) {
         _requestNext(_loginButtonFocusNode);
         return KeyEventResult.handled;
       }
@@ -73,16 +73,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (key == LogicalKeyboardKey.arrowUp) {
       if (currentNode == _loginButtonFocusNode) {
-        _requestPrev(_passwordFocusNode);
+        _requestPrev(_passwordTileFocusNode);
         return KeyEventResult.handled;
       }
-      if (currentNode == _passwordFocusNode) {
-        _requestPrev(_usernameFocusNode);
+      if (currentNode == _passwordTileFocusNode) {
+        _requestPrev(_usernameTileFocusNode);
         return KeyEventResult.handled;
       }
     }
 
-    // Trigger login from password field on Enter/Select.
     final bool isSelect =
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.enter ||
@@ -93,38 +92,131 @@ class _LoginScreenState extends State<LoginScreen> {
       return KeyEventResult.handled;
     }
 
+    // We handle "Select" for tiles via ListTile.onTap, not here.
     return KeyEventResult.ignored;
   }
 
-  InputDecoration _tvInputDecoration({
-    required String label,
-    required bool hasFocus,
-  }) {
-    final Color focusColor = Theme.of(context).colorScheme.primary;
-    final Color baseColor = Theme.of(context).colorScheme.outlineVariant;
+  // PUBLIC_INTERFACE
+  Future<void> _editValue({
+    required String title,
+    required String initialValue,
+    required bool obscure,
+    required ValueChanged<String> onSaved,
+  }) async {
+    /// Opens a TV-friendly dialog editor for a single string value.
+    ///
+    /// Uses a TextField inside a dialog to allow hardware keyboard/remote input.
+    /// Returns via `onSaved` if user confirms.
+    final TextEditingController controller =
+        TextEditingController(text: initialValue);
 
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(
-        fontSize: 20,
-        color: hasFocus ? focusColor : Theme.of(context).colorScheme.onSurface,
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-      filled: true,
-      fillColor: Theme.of(context).colorScheme.surface,
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(
-          color: baseColor,
-          width: 2,
-        ),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(
-          color: focusColor,
-          width: 4,
-        ),
+    try {
+      final String? result = await showDialog<String>(
+        context: context,
+        barrierDismissible: true,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(title),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              obscureText: obscure,
+              enableSuggestions: !obscure,
+              autocorrect: !obscure,
+              style: const TextStyle(fontSize: 20),
+              decoration: InputDecoration(
+                hintText: obscure ? 'Enter password' : 'Enter username',
+                border: const OutlineInputBorder(),
+              ),
+              onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(null),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(dialogContext).pop(
+                  controller.text,
+                ),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (result != null) {
+        onSaved(result);
+      }
+    } finally {
+      controller.dispose();
+    }
+  }
+
+  String _passwordPreview(String value) {
+    if (value.isEmpty) return '';
+    // Keep it simple: show a fixed "••••" so we don't leak length on screen.
+    return '••••';
+  }
+
+  Widget _focusableTile({
+    required FocusNode focusNode,
+    required String title,
+    required String valuePreview,
+    required VoidCallback onActivate,
+  }) {
+    return Focus(
+      focusNode: focusNode,
+      onKeyEvent: (node, event) => _handleDpadTraversal(node, event),
+      child: Builder(
+        builder: (context) {
+          final bool hasFocus = Focus.of(context).hasFocus;
+          final ColorScheme scheme = Theme.of(context).colorScheme;
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              color: hasFocus
+                  ? scheme.primary.withAlpha(26)
+                  : scheme.surface.withAlpha(255),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: hasFocus ? scheme.primary : scheme.outlineVariant,
+                width: hasFocus ? 3 : 2,
+              ),
+            ),
+            child: ListTile(
+              dense: false,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              title: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: hasFocus ? scheme.primary : scheme.onSurface,
+                ),
+              ),
+              trailing: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 320),
+                child: Text(
+                  valuePreview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              onTap: onActivate, // DPAD_CENTER triggers onTap when focused.
+            ),
+          );
+        },
       ),
     );
   }
@@ -158,51 +250,51 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                   ),
                   const SizedBox(height: 36),
-                  Focus(
-                    focusNode: _usernameFocusNode,
-                    onKeyEvent: (node, event) =>
-                        _handleDpadTraversal(node, event),
-                    child: Builder(
-                      builder: (context) {
-                        final bool hasFocus = Focus.of(context).hasFocus;
-                        return TextField(
-                          controller: _usernameController,
-                          focusNode: _usernameFocusNode,
-                          textInputAction: TextInputAction.next,
-                          style: const TextStyle(fontSize: 22),
-                          decoration: _tvInputDecoration(
-                            label: 'Username',
-                            hasFocus: hasFocus,
-                          ),
-                          onSubmitted: (_) => _requestNext(_passwordFocusNode),
-                        );
-                      },
-                    ),
+
+                  _focusableTile(
+                    focusNode: _usernameTileFocusNode,
+                    title: 'Username',
+                    valuePreview: _username.isEmpty ? 'Select to enter' : _username,
+                    onActivate: () async {
+                      await _editValue(
+                        title: 'Username',
+                        initialValue: _username,
+                        obscure: false,
+                        onSaved: (value) {
+                          setState(() => _username = value);
+                        },
+                      );
+
+                      if (!mounted) return;
+                      _usernameTileFocusNode.requestFocus();
+                    },
                   ),
+
                   const SizedBox(height: 22),
-                  Focus(
-                    focusNode: _passwordFocusNode,
-                    onKeyEvent: (node, event) =>
-                        _handleDpadTraversal(node, event),
-                    child: Builder(
-                      builder: (context) {
-                        final bool hasFocus = Focus.of(context).hasFocus;
-                        return TextField(
-                          controller: _passwordController,
-                          focusNode: _passwordFocusNode,
-                          obscureText: true,
-                          textInputAction: TextInputAction.done,
-                          style: const TextStyle(fontSize: 22),
-                          decoration: _tvInputDecoration(
-                            label: 'Password',
-                            hasFocus: hasFocus,
-                          ),
-                          onSubmitted: (_) => _triggerLogin(),
-                        );
-                      },
-                    ),
+
+                  _focusableTile(
+                    focusNode: _passwordTileFocusNode,
+                    title: 'Password',
+                    valuePreview: _password.isEmpty
+                        ? 'Select to enter'
+                        : _passwordPreview(_password),
+                    onActivate: () async {
+                      await _editValue(
+                        title: 'Password',
+                        initialValue: _password,
+                        obscure: true,
+                        onSaved: (value) {
+                          setState(() => _password = value);
+                        },
+                      );
+
+                      if (!mounted) return;
+                      _passwordTileFocusNode.requestFocus();
+                    },
                   ),
+
                   const SizedBox(height: 28),
+
                   Focus(
                     focusNode: _loginButtonFocusNode,
                     onKeyEvent: (node, event) =>
@@ -245,9 +337,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                   ),
+
                   const SizedBox(height: 18),
                   Text(
-                    'Use DPAD ↑/↓ to move focus. Press Select to login.',
+                    'Use DPAD ↑/↓ to move focus. Press Select to edit fields or login.',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           fontSize: 18,

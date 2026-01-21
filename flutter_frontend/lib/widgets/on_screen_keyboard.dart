@@ -73,8 +73,8 @@ class OnScreenKeyboard extends StatefulWidget {
 class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
   late String _buffer;
 
-  // We keep a stable focus node for initial focus, and individual key focus nodes
-  // so DPAD traversal is predictable and does not rely on implicit focus order.
+  // We keep individual key focus nodes so DPAD traversal is predictable and does
+  // not rely on implicit focus order.
   late final List<FocusNode> _keyFocusNodes;
 
   /// Flattened key model used by the GridView.
@@ -101,6 +101,10 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
 
   @override
   void dispose() {
+    // Defensive: ensure focus doesn't get left attached to a soon-to-be disposed
+    // subtree (rare but can happen on some TV devices during route transitions).
+    FocusManager.instance.primaryFocus?.unfocus();
+
     for (final node in _keyFocusNodes) {
       node.dispose();
     }
@@ -198,6 +202,29 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
     return '••••';
   }
 
+  KeyEventResult _handleKeyActivate(_KeySpec spec, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    final LogicalKeyboardKey key = event.logicalKey;
+
+    // Common "select" keys across Android TV remotes / keyboards / emulators.
+    final bool isSelect =
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.gameButtonA;
+
+    if (isSelect) {
+      _activateKey(spec);
+
+      // IMPORTANT: consume the event so it doesn't bubble and cause double
+      // activations on some platforms.
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ColorScheme scheme = Theme.of(context).colorScheme;
@@ -250,7 +277,8 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
                 const SizedBox(height: 18),
                 Expanded(
                   child: FocusTraversalGroup(
-                    policy: WidgetOrderTraversalPolicy(),
+                    // Grid-like traversal should be stable/predictable.
+                    policy: ReadingOrderTraversalPolicy(),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
                         // 10 columns for character grid; action row is appended.
@@ -283,21 +311,38 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
 
                             return Focus(
                               focusNode: node,
+                              onKeyEvent: (_, event) => _handleKeyActivate(spec, event),
                               child: Builder(
                                 builder: (context) {
                                   final bool hasFocus = Focus.of(context).hasFocus;
 
+                                  // High contrast focus ring for TV visibility.
+                                  final Color focusBorder =
+                                      hasFocus ? scheme.onPrimary : scheme.outlineVariant;
+                                  final Color focusFill = hasFocus
+                                      ? scheme.primary.withAlpha(220)
+                                      : scheme.surfaceContainerHighest.withAlpha(160);
+
                                   return AnimatedContainer(
-                                    duration: const Duration(milliseconds: 90),
+                                    duration: const Duration(milliseconds: 100),
                                     decoration: BoxDecoration(
-                                      color: hasFocus
-                                          ? scheme.primary.withAlpha(36)
-                                          : scheme.surfaceContainerHighest.withAlpha(160),
+                                      color: focusFill,
                                       borderRadius: BorderRadius.circular(12),
                                       border: Border.all(
-                                        color: hasFocus ? scheme.primary : scheme.outlineVariant,
-                                        width: hasFocus ? 3 : 2,
+                                        // Wider ring improves visibility and also makes focus
+                                        // detectable in tests.
+                                        color: focusBorder,
+                                        width: hasFocus ? 4 : 2,
                                       ),
+                                      boxShadow: hasFocus
+                                          ? <BoxShadow>[
+                                              BoxShadow(
+                                                color: scheme.primary.withAlpha(110),
+                                                blurRadius: 18,
+                                                spreadRadius: 1,
+                                              ),
+                                            ]
+                                          : const <BoxShadow>[],
                                     ),
                                     child: InkWell(
                                       onTap: () => _activateKey(spec),
@@ -310,7 +355,9 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
                                             style: TextStyle(
                                               fontSize: isAction ? 18 : 20,
                                               fontWeight: FontWeight.w800,
-                                              color: hasFocus ? scheme.primary : scheme.onSurface,
+                                              color: hasFocus
+                                                  ? scheme.onPrimary
+                                                  : scheme.onSurface,
                                             ),
                                           ),
                                         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_frontend/main.dart';
 
@@ -74,6 +75,74 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
 
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'OSK: DPAD select activates the focused key (adds character to buffer)',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+      await tester.pumpAndSettle();
+
+      // Open OSK.
+      await tester.tap(find.widgetWithText(ListTile, 'Username'));
+      await tester.pumpAndSettle();
+
+      // OSK requests focus on the first key after first frame.
+      // Press Select to activate (should append 'A').
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      // Submit.
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'OSK: focused key has visible high-contrast focus border styling',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+      await tester.pumpAndSettle();
+
+      // Open OSK.
+      await tester.tap(find.widgetWithText(ListTile, 'Username'));
+      await tester.pumpAndSettle();
+
+      // Find the focused tile container by locating the 'A' label and walking up
+      // to the nearest AnimatedContainer.
+      final Finder aText = find.text('A');
+      expect(aText, findsOneWidget);
+
+      final Finder animatedContainer = find.ancestor(
+        of: aText,
+        matching: find.byType(AnimatedContainer),
+      );
+      expect(animatedContainer, findsWidgets);
+
+      // At least one of these AnimatedContainers should be the focused key,
+      // which uses a thicker border width (4 vs 2).
+      bool foundFocusedStyle = false;
+      for (final Element e in animatedContainer.evaluate()) {
+        final AnimatedContainer w = e.widget as AnimatedContainer;
+        final Decoration? decoration = w.decoration;
+        if (decoration is BoxDecoration) {
+          final Border? border = decoration.border as Border?;
+          if (border != null) {
+            final double width = border.top.width;
+            if (width >= 4) {
+              foundFocusedStyle = true;
+              break;
+            }
+          }
+        }
+      }
+
+      expect(foundFocusedStyle, isTrue);
       expect(tester.takeException(), isNull);
     },
   );

@@ -3,16 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_frontend/main.dart';
 
 void main() {
-  testWidgets('App generation message displayed', (WidgetTester tester) async {
+  testWidgets('Login screen shows username, password and login button',
+      (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
 
-    expect(find.text('flutter_frontend App is being generated...'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Username'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Password'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Login'), findsOneWidget);
   });
 
-  testWidgets('App bar has correct title', (WidgetTester tester) async {
+  testWidgets('MaterialApp is created', (WidgetTester tester) async {
     await tester.pumpWidget(const MyApp());
-
-    expect(find.text('flutter_frontend'), findsOneWidget);
+    expect(find.byType(MaterialApp), findsOneWidget);
   });
 }

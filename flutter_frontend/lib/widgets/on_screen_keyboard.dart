@@ -421,7 +421,7 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
                                 ? const EdgeInsets.symmetric(horizontal: 10, vertical: 10)
                                 : const EdgeInsets.symmetric(horizontal: 6, vertical: 8);
 
-                            return FocusableActionDetector(
+                            return Focus(
                               focusNode: node,
                               autofocus: false,
                               onKeyEvent: (node, event) => _handleKeyEvent(

@@ -353,6 +353,27 @@ class MaterialTheme {
         ),
         scaffoldBackgroundColor: colorScheme.surface,
         canvasColor: colorScheme.surface,
+
+        // TV-friendly focus visuals: make focus clearly visible in dark mode,
+        // while still looking appropriate in light mode.
+        focusColor: colorScheme.primary.withAlpha(70),
+        highlightColor: colorScheme.primary.withAlpha(40),
+        hoverColor: colorScheme.primary.withAlpha(30),
+
+        // Ensure common components pick up the scheme and have clear focus/
+        // interaction affordances on TV.
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: colorScheme.primary,
+            foregroundColor: colorScheme.onPrimary,
+          ),
+        ),
+        listTileTheme: ListTileThemeData(
+          iconColor: colorScheme.onSurfaceVariant,
+          textColor: colorScheme.onSurface,
+          selectedColor: colorScheme.primary,
+          selectedTileColor: colorScheme.primary.withAlpha(28),
+        ),
       );
 
   List<ExtendedColor> get extendedColors => [];

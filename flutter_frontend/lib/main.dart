@@ -14,6 +14,8 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Keep Reddit Sans as the app-wide default font, but drive colors from the
+    // app's generated MaterialTheme helper.
     final MaterialTheme materialTheme = MaterialTheme(
       GoogleFonts.redditSansTextTheme(),
     );
@@ -22,7 +24,8 @@ class MyApp extends StatelessWidget {
       title: 'AI Build Tool',
       theme: materialTheme.light(),
       darkTheme: materialTheme.dark(),
-      themeMode: ThemeMode.system,
+      // Force dark mode across the app for this subtask.
+      themeMode: ThemeMode.dark,
       initialRoute: '/login',
       routes: <String, WidgetBuilder>{
         '/login': (_) => const LoginScreen(),

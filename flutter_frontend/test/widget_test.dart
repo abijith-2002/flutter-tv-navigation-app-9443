@@ -22,4 +22,25 @@ void main() {
     await tester.pumpWidget(const MyApp());
     expect(find.byType(MaterialApp), findsOneWidget);
   });
+
+  testWidgets(
+    'Opening and closing the username editor dialog does not throw (focus tree regression)',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+      await tester.pumpAndSettle();
+
+      // Tap Username tile to open the dialog.
+      await tester.tap(find.widgetWithText(ListTile, 'Username'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      // Close dialog via Cancel.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

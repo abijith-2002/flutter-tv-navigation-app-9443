@@ -306,7 +306,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         return SizedBox(
                           height: 64,
                           child: ElevatedButton(
-                            focusNode: _loginButtonFocusNode,
+                            // IMPORTANT:
+                            // Do not pass `_loginButtonFocusNode` here because the outer `Focus`
+                            // already owns it. A FocusNode can only be attached to one Focus
+                            // widget; attaching it twice can break the focus tree and trigger:
+                            // "Tried to make a child into a parent of itself".
                             style: ElevatedButton.styleFrom(
                               textStyle: const TextStyle(
                                 fontSize: 22,

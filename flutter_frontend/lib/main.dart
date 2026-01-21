@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_frontend/screens/home_screen.dart';
 import 'package:flutter_frontend/screens/login_screen.dart';
+import 'package:flutter_frontend/theme/material_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   runApp(const MyApp());
@@ -12,12 +14,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final MaterialTheme materialTheme = MaterialTheme(
+      GoogleFonts.redditSansTextTheme(),
+    );
+
     return MaterialApp(
       title: 'AI Build Tool',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: materialTheme.light(),
+      darkTheme: materialTheme.dark(),
+      themeMode: ThemeMode.system,
       initialRoute: '/login',
       routes: <String, WidgetBuilder>{
         '/login': (_) => const LoginScreen(),

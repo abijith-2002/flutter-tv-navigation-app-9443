@@ -93,7 +93,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return KeyEventResult.handled;
     }
 
-    // "Select" for tiles is handled by ListTile.onTap, not here.
+    // For tiles, Select/Enter is handled by the tile Focus wrapper so it works
+    // even when ListTile doesn't receive/translate the key into a tap event.
     return KeyEventResult.ignored;
   }
 
@@ -125,8 +126,12 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => onSaved(result));
     }
 
-    // Ensure focus is restored cleanly to the triggering tile.
-    returnFocusTo.requestFocus();
+    // Restoring focus immediately after the dialog closes can be flaky on TV
+    // devices because focus is still settling after Navigator.pop.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      returnFocusTo.requestFocus();
+    });
   }
 
   String _passwordPreview(String value) {
@@ -141,9 +146,32 @@ class _LoginScreenState extends State<LoginScreen> {
     required String valuePreview,
     required VoidCallback onActivate,
   }) {
+    KeyEventResult handleTileKey(FocusNode node, KeyEvent event) {
+      final KeyEventResult traversal = _handleDpadTraversal(node, event);
+      if (traversal == KeyEventResult.handled) return traversal;
+
+      if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+      // Many TV remotes send DPAD_CENTER as Select/Enter. When we wrap ListTile
+      // with Focus(onKeyEvent), ListTile may never see the key and thus won't
+      // translate it into a tap. Explicitly trigger activation here.
+      final LogicalKeyboardKey key = event.logicalKey;
+      final bool isSelect =
+          key == LogicalKeyboardKey.select ||
+          key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter;
+
+      if (isSelect && (node == _usernameTileFocusNode || node == _passwordTileFocusNode)) {
+        onActivate();
+        return KeyEventResult.handled;
+      }
+
+      return KeyEventResult.ignored;
+    }
+
     return Focus(
       focusNode: focusNode,
-      onKeyEvent: (node, event) => _handleDpadTraversal(node, event),
+      onKeyEvent: (node, event) => handleTileKey(node, event),
       child: Builder(
         builder: (context) {
           final bool hasFocus = Focus.of(context).hasFocus;
@@ -186,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
               ),
-              onTap: onActivate, // DPAD_CENTER triggers onTap when focused.
+              onTap: onActivate,
             ),
           );
         },

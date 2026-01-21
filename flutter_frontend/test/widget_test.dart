@@ -54,4 +54,27 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'DPAD select opens on-screen keyboard when Username tile is focused',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+      await tester.pumpAndSettle();
+
+      // The login screen requests initial focus on Username tile.
+      // Send Select/Enter and ensure the keyboard shows.
+      await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Username'), findsWidgets);
+      expect(find.text('Done'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+
+      // Close the keyboard to ensure no focus-related exceptions.
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

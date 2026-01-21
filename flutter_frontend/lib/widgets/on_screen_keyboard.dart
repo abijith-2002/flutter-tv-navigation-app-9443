@@ -87,7 +87,7 @@ class _OnScreenKeyboardState extends State<OnScreenKeyboard> {
     _keys = _buildKeys();
     _keyFocusNodes = List<FocusNode>.generate(
       _keys.length,
-      (i) => FocusNode(debugLabel: 'kb_key_$i_${_keys[i].label}'),
+      (i) => FocusNode(debugLabel: 'kb_key_${i}_${_keys[i].label}'),
     );
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
